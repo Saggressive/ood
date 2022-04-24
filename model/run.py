@@ -200,6 +200,8 @@ def eval(config,model,val_loader,device,labels_dict):
     # epoch_val_loss = 0
     all_predict, all_labels, all_scores = torch.tensor([]), torch.tensor([]), torch.tensor([])
     for i, batch in enumerate(val_loader):
+        if i==1:
+            break
         with torch.no_grad():
             output = model(input_ids=batch["input_ids"].to(device),attention_mask=batch["attention_mask"].to(device),
                            labels=batch["labels"].to(device),mode="val",tmp=config["val_tmp"])
@@ -228,7 +230,7 @@ def eval(config,model,val_loader,device,labels_dict):
             all_scores = torch.cat([all_scores, predict_scores])
 
     all_predict, all_labels = all_predict.numpy(), all_labels.numpy()
-    thresolds = np.linspace(0, 1, 500, endpoint=False)
+    thresolds = np.linspace(0, 1, 1000, endpoint=False)
     best_f1,best_op,best_acc=-1,-1,-1
     best_ood_acc,best_ood_f1=-1,-1
     for i,value in enumerate(thresolds):
@@ -260,8 +262,8 @@ def eval(config,model,val_loader,device,labels_dict):
     #     best_acc=acc
 
     # return acc,f1,epoch_val_loss
-    print(f"\n{best_acc},{best_f1},{best_op}")
-    print(f"\nood:{best_ood_acc},{best_ood_f1}")
+    print(f"\nacc:{best_acc},f1:{best_f1},threshold:{best_op}")
+    print(f"\nood acc:{best_ood_acc}")
     return best_acc,best_f1,best_op
 
 def test(config,model,val_loader,device,labels_dict , op):

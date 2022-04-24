@@ -17,5 +17,5 @@ if __name__=="__main__":
     #     7.2356e-05]],dtype=torch.float)
     a=torch.tensor([[0.9,0.05,0.05],[0.8,0.1,0.1],[0.7,0.15,0.15]])
     print(softmax(a))
-    a=torch.div(a,0.5)
+    a=torch.div(a,10)
     print(softmax(a))
