@@ -125,7 +125,7 @@ def train(config:dict=None) ->None:
                 batch["labels"]=torch.cat([pos_batch["labels"],neg_batch["labels"]],dim=0)
                 output = model(input_ids=batch["input_ids"].to(device),
                                attention_mask=batch["attention_mask"].to(device),
-                               labels=batch["labels"].to(device), mode="train", use_soft=use_soft,tmp=config["tmp"])
+                               labels=batch["labels"].to(device), alpha=1.0,beta=1.0,tmp=config["tmp"])
                 ce_loss = output.loss
 
                 with torch.no_grad():
@@ -198,7 +198,7 @@ def eval(config,model,val_loader,device,labels_dict):
     model.eval()
 
     # epoch_val_loss = 0
-    all_predict, all_labels, all_scores = torch.tensor([]), torch.tensor([]), torch.tensor([])
+    all_predict, all_labels, all_scores ,all_binary_predict= torch.tensor([]), torch.tensor([]), torch.tensor([]),torch.tensor([])
     for i, batch in enumerate(val_loader):
         with torch.no_grad():
             output = model(input_ids=batch["input_ids"].to(device),attention_mask=batch["attention_mask"].to(device),
@@ -206,47 +206,45 @@ def eval(config,model,val_loader,device,labels_dict):
             logits = output.logits.view(-1, config["num_labels"])
             logits=torch.div(logits,config["val_tmp"])
             logits=softmax(logits,dim=1)
+            binary_logits=output.binary_logits.view(-1,2)
+            binary_predict_labels=torch.argmax(binary_logits,dim=1)
             # epoch_val_loss += (output.loss.detach().item()) * len(batch["labels"])
             max_values_indices = torch.max(logits, dim=1)
             predict_labels = max_values_indices[1].cpu().detach()
             predict_scores = max_values_indices[0].cpu().detach()
             labels = batch["labels"].cpu()
+            binary_labels=batch["binary_labels"].cpu()
             append_label=[]
-            if config["use_soft"]:
-                for label_index,label in enumerate(labels):
-                    label_binary = (label == torch.tensor(1 / len(labels_dict.keys())))
-                    if torch.sum(label_binary).item() == len(labels_dict.keys()):
-                        append_label.append(torch.tensor(len(labels_dict.keys())))
-                        # print(label)
-                    else:
-                        append_label.append(torch.argmax(label))
-                append_label=torch.tensor(append_label)
-                all_labels = torch.cat([all_labels, append_label])
-            else:
-                all_labels = torch.cat([all_labels, labels])
+            for label_index, label in enumerate(labels):
+                label_binary = binary_labels[label_index]
+                if label_binary == torch.tensor(1):
+                    append_label.append(torch.tensor(len(labels_dict.keys())))
+                    # print(label)
+                else:
+                    append_label.append(label)
+            append_label = torch.tensor(append_label)
+            all_labels = torch.cat([all_labels, append_label])
             all_predict = torch.cat([all_predict, predict_labels])
+            all_binary_predict=torch.cat([all_binary_predict,binary_predict_labels])
             all_scores = torch.cat([all_scores, predict_scores])
 
     all_predict, all_labels = all_predict.numpy(), all_labels.numpy()
-    thresolds = np.linspace(0, 1, 500, endpoint=False)
     best_f1,best_op,best_acc=-1,-1,-1
     best_ood_acc,best_ood_f1=-1,-1
-    for i,value in enumerate(thresolds):
-        all_predict_clone=all_predict.copy()
-        for index, item in enumerate(all_scores):
-            if item <value:
-                all_predict_clone[index]=len(labels_dict.keys())
-        acc,  f1 = evaluate_base(all_predict_clone, all_labels)
-        ood_labels_binary=(all_labels==len(labels_dict.keys()))
-        ood_labels=all_labels[ood_labels_binary]
-        ood_predict=all_predict_clone[ood_labels_binary]
-        ood_acc,ood_f1=evaluate_base(ood_predict,ood_labels)
-        if f1>best_f1:
-            best_f1=f1
-            best_acc=acc
-            best_op=value
-            best_ood_acc=ood_acc
-            best_ood_f1=ood_f1
+
+    for index, item in enumerate(all_binary_predict.clone()):
+        if item==torch.tensor(1):
+            all_predict[index]=len(labels_dict.keys())
+    acc,  f1 = evaluate_base(all_predict, all_labels)
+    ood_labels_binary=(all_labels==len(labels_dict.keys()))
+    ood_labels=all_labels[ood_labels_binary]
+    ood_predict=all_predict[ood_labels_binary]
+    ood_acc,ood_f1=evaluate_base(ood_predict,ood_labels)
+    if f1>best_f1:
+        best_f1=f1
+        best_acc=acc
+        best_ood_acc=ood_acc
+        best_ood_f1=ood_f1
     # all_predict_clone=all_predict.copy()
     # for index, item in enumerate(all_scores):
     #     if item <0.06:

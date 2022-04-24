@@ -2,6 +2,14 @@ from transformers.models.bert.modeling_bert import *
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
 logger = logging.get_logger(__name__)
+@dataclass
+class ClassifierOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    binary_logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
 def soft_logits(input : torch.Tensor ,target : torch.Tensor ,mode:str="average",tmp: float = 1):
     input=torch.div(input,tmp)
     denominator = torch.log(torch.sum(torch.exp(input), dim=1))
@@ -102,8 +110,6 @@ class BertForSequenceClassification(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        mode:Optional[str] = "train",
-        use_soft:Optional[bool]=False,
         beta:Optional[float]=1.0,
         alpha:Optional[float]=1.0,
         tmp: Optional[float] = 1,
@@ -150,9 +156,10 @@ class BertForSequenceClassification(BertPreTrainedModel):
             binary_loss = binary_loss_fct(binary_logits.view(-1, 2), binary_labels.view(-1))
             loss = alpha * classify_loss + beta * binary_loss
 
-        return SequenceClassifierOutput(
+        return ClassifierOutput(
             loss=loss,
             logits=classify_logits,
+            binary_logits=binary_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

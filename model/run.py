@@ -260,7 +260,7 @@ def eval(config,model,val_loader,device,labels_dict):
     #     best_acc=acc
 
     # return acc,f1,epoch_val_loss
-    print(f"\n{best_acc},{best_f1},{best_op}")
+    print(f"\nacc:{best_acc},f1_macro:{best_f1},threshold:{best_op}")
     print(f"\nood:{best_ood_acc},{best_ood_f1}")
     return best_acc,best_f1,best_op
 
@@ -370,7 +370,7 @@ if __name__=="__main__":
         "use_balance":False,
         "tb_folder":"./tb_folder_idea_no_neg",
         "tmp":1,
-        "val_tmp":0.5,
+        "val_tmp":1,
         "use_soft":True,
         "use_neg":True,
         "token_length":50,
