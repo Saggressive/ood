@@ -76,6 +76,7 @@ def tokenizer_process(batch,tokenizer,max_source_length):#调用时要使用匿�
         return_overflowing_tokens=False,
     )
     model_inputs["labels"] = numpy.array((batch["label"]))
+    model_inputs["binary_labels"]=numpy.array(batch["binary_label"])
     # model_inputs["labels"] = 0
     return model_inputs
 

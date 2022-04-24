@@ -32,7 +32,8 @@ from the corresponding reading passage, or the question might be unanswerable.
 
 _URL = "../../oos/"
 _URLS = {
-    "neg": _URL + "squad.tsv",
+    "neg_train": _URL + "neg_train.tsv",
+    "neg_val": _URL + "neg_val.tsv",
     "dev": _URL + "dev.tsv",
 }
 
@@ -59,32 +60,18 @@ class Ood_data(datasets.GeneratorBasedBuilder):
         ),
     ]
 
-    def __init__(self, labels_dict,use_soft,*args, **kwargs):
+    def __init__(self, labels_dict,*args, **kwargs):
 
         super(Ood_data,self).__init__(*args, **kwargs)
         self.labels_dict=labels_dict
         self.labels_dict_keys=self.labels_dict.keys()
-        self.use_soft=use_soft
 
     def _info(self):
-        # if self.use_soft:
-        #     features = datasets.Features(
-        #         {
-        #             "text": datasets.Value("string"),
-        #             "label": datasets.Sequence(datasets.Value("float32"))
-        #         }
-        #     )
-        # else:
-        #     features = datasets.Features(
-        #         {
-        #             "text": datasets.Value("string"),
-        #             "label": datasets.Value("int32")
-        #         }
-        #     )
         features = datasets.Features(
             {
                 "text": datasets.Value("string"),
-                "label": datasets.Sequence(datasets.Value("float32"))
+                "label": datasets.Value("int32"),
+                "binary_label": datasets.Value("int32"),
             }
         )
         return datasets.DatasetInfo(
@@ -101,9 +88,17 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    "filepath": downloaded_files["neg"],
-                    # "filepath": downloaded_files["dev"],
-                    "mode":"neg"
+                    # "filepath": downloaded_files["neg_train"],
+                    "filepath": downloaded_files["dev"],
+                    "mode":"neg_train"
+                },
+            ),
+            datasets.SplitGenerator(
+                name=datasets.Split.VALIDATION,
+                gen_kwargs={
+                    # "filepath": downloaded_files["neg_val"],
+                    "filepath": downloaded_files["dev"],
+                    "mode": "neg_val"
                 },
             )
         ]
@@ -111,17 +106,12 @@ class Ood_data(datasets.GeneratorBasedBuilder):
     def _generate_examples(self, filepath ,mode):
         """This function returns the examples in the raw (text) form."""
         logger.info("generating examples from = %s", filepath)
-        if mode=="neg":
+        if mode=="neg_train" or mode=="neg_val":
             with open(filepath, "r", encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter="\t", quotechar=None)
                 for idx, line in enumerate(reader):
-                    if idx == 0:
-                        continue
-                    if self.use_soft:
-                        one_hot = [1.0 / len(self.labels_dict_keys)] * len(self.labels_dict_keys)
-                        label = one_hot
-                    else:
-                        label = len(self.labels_dict_keys)
-                    yield idx, {"text": line[0], "label": label}
+                    label = len(self.labels_dict_keys)
+                    binary_label = 1
+                    yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
         else:
             raise ValueError("mode error")

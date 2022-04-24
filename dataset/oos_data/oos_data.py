@@ -61,32 +61,18 @@ class Ood_data(datasets.GeneratorBasedBuilder):
         ),
     ]
 
-    def __init__(self, labels_dict,use_soft,*args, **kwargs):
+    def __init__(self, labels_dict,*args, **kwargs):
 
         super(Ood_data,self).__init__(*args, **kwargs)
         self.labels_dict=labels_dict
         self.labels_dict_keys=self.labels_dict.keys()
-        self.use_soft=use_soft
 
     def _info(self):
-        # if self.use_soft:
-        #     features = datasets.Features(
-        #         {
-        #             "text": datasets.Value("string"),
-        #             "label": datasets.Sequence(datasets.Value("float32"))
-        #         }
-        #     )
-        # else:
-        #     features = datasets.Features(
-        #         {
-        #             "text": datasets.Value("string"),
-        #             "label": datasets.Value("int32")
-        #         }
-        #     )
         features = datasets.Features(
             {
                 "text": datasets.Value("string"),
-                "label": datasets.Sequence(datasets.Value("float32"))
+                "label": datasets.Value("int32"),
+                "binary_label": datasets.Value("int32"),
             }
         )
         return datasets.DatasetInfo(
@@ -103,16 +89,16 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    "filepath": downloaded_files["train"],
-                    # "filepath": downloaded_files["dev"],
+                    # "filepath": downloaded_files["train"],
+                    "filepath": downloaded_files["dev"],
                     "mode":"train"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    "filepath": downloaded_files["test"],
-                    # "filepath": downloaded_files["dev"],
+                    # "filepath": downloaded_files["test"],
+                    "filepath": downloaded_files["dev"],
                     "mode":"test"
                 },
             ),
@@ -136,58 +122,34 @@ class Ood_data(datasets.GeneratorBasedBuilder):
                         continue
                     if line[1] not in self.labels_dict_keys:
                         continue
-                    if self.use_soft:
-                        dict_label=self.labels_dict[line[1]]
-                        one_hot=[0.0]*len(self.labels_dict_keys)
-                        one_hot[dict_label]=1.0
-                        label=one_hot
                     else:
                         label=self.labels_dict[line[1]]
-                    yield idx, {"text": line[0], "label": label}
-        elif mode=="test":
+                        binary_label=0
+                    yield idx, {"text": line[0], "label": label,"binary_label":binary_label}
+        elif mode=="val":
             with open(filepath, "r", encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter="\t", quotechar=None)
                 for idx, line in enumerate(reader):
                     if idx == 0:
                         continue
                     if line[1] not in self.labels_dict_keys:
-                        if self.use_soft:
-                            one_hot = [1.0/len(self.labels_dict_keys)]*len(self.labels_dict_keys)
-                            label = one_hot
-                        else:
-                            label = len(self.labels_dict_keys)
-                        yield idx, {"text": line[0], "label": label}
+                        continue
                     else:
-                        if self.use_soft:
-                            dict_label = self.labels_dict[line[1]]
-                            one_hot = [0.0]*len(self.labels_dict_keys)
-                            one_hot[dict_label] = 1.0
-                            label = one_hot
-                        else:
-                            label = self.labels_dict[line[1]]
-                        yield idx, {"text": line[0], "label": label}
-        elif mode=="val" :
+                        label = self.labels_dict[line[1]]
+                        binary_label = 0
+                    yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
+        elif mode=="test" :
             with open(filepath, "r", encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter="\t", quotechar=None)
                 for idx, line in enumerate(reader):
                     if idx == 0:
                         continue
                     if line[1] not in self.labels_dict_keys:
-                        if self.use_soft:
-                            one_hot = [1.0 / len(self.labels_dict_keys)] * len(self.labels_dict_keys)
-                            label = one_hot
-                        else:
-                            label = len(self.labels_dict_keys)
-                        yield idx, {"text": line[0], "label": label}
+                        label = len(self.labels_dict_keys)
+                        binary_label = 1
                     else:
-                        if self.use_soft:
-                            dict_label = self.labels_dict[line[1]]
-                            one_hot = [0.0]*len(self.labels_dict_keys)
-                            one_hot[dict_label] = 1.0
-                            label = one_hot
-                        else:
-                            label = self.labels_dict[line[1]]
-                        yield idx, {"text": line[0], "label": label}
-
+                        label = self.labels_dict[line[1]]
+                        binary_label = 0
+                    yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
         else:
             raise ValueError("mode error")
