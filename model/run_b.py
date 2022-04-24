@@ -22,7 +22,7 @@ def train(config:dict=None) ->None:
     logger = tb_logger.Logger(logdir=config["tb_folder"], flush_secs=2)
     labels_dict=get_label_dict(config["data_path"],config["know_rate"])
     tokenizer = BertTokenizer.from_pretrained(config["pretrained_path"])
-    model = BertForSequenceClassification.from_pretrained(config["pretrained_path"], num_labels=len(labels_dict.keys()))
+    model = BertForSequenceClassification.from_pretrained(config["pretrained_path"], num_labels=len(labels_dict.keys())+1)
     model.config.output_hidden_states = True
     datacollator = DataCollatorWithPadding(
         tokenizer=tokenizer,
