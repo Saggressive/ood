@@ -89,16 +89,16 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    # "filepath": downloaded_files["train"],
-                    "filepath": downloaded_files["dev"],
+                    "filepath": downloaded_files["train"],
+                    # "filepath": downloaded_files["dev"],
                     "mode":"train"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.TEST,
                 gen_kwargs={
-                    # "filepath": downloaded_files["test"],
-                    "filepath": downloaded_files["dev"],
+                    "filepath": downloaded_files["test"],
+                    # "filepath": downloaded_files["dev"],
                     "mode":"test"
                 },
             ),

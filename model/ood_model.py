@@ -35,10 +35,11 @@ class classification_moudle(nn.Module):
         y=self.linear1(y)
         y=F.leaky_relu(y)
         y=F.normalize(y)
-        y=F.dropout(y,p=0.5)
+        y=F.dropout(y,p=0.7)
         y=self.linear2(y)
         y=F.leaky_relu(y)
         y=F.normalize(y)
+        y = F.dropout(y, p=0.7)
         x=x+y#残差链接
         return x
 
@@ -56,6 +57,7 @@ class classification_model(nn.Module):
         y=self.linear1(y)
         y=F.leaky_relu(y)
         y=F.normalize(y)
+        y = F.dropout(y, p=0.5)
         y=self.linear2(y)
         return y
 
@@ -65,18 +67,28 @@ class binary_model(nn.Module):
         self.hidden_size, self.output_size,self.softmax_size = hidden_size, output_size,softmax_size
         self.moudle1 = classification_moudle(self.hidden_size)
         self.moudle2 = classification_moudle(self.hidden_size)
+        self.moudle3 = classification_moudle(self.hidden_size)
+        self.moudle4 = classification_moudle(self.hidden_size)
         self.linear1 = nn.Linear(self.hidden_size+self.softmax_size, int(self.hidden_size / 2))
-        self.linear2 = nn.Linear(int(self.hidden_size / 2)+self.softmax_size, self.output_size)
+        self.linear2 = nn.Linear(int(self.hidden_size / 2)+self.softmax_size, int(self.hidden_size / 2)+self.softmax_size)
+        self.linear3 = nn.Linear(int(self.hidden_size / 2)+self.softmax_size,self.output_size)
 
     def forward(self, x , soft_scores):
         y = self.moudle1(x)
         y = self.moudle2(y)
+        y = self.moudle3(y)
+        y = self.moudle4(y)
         y = torch.cat([y,soft_scores],dim=1)
         y = self.linear1(y)
         y = F.leaky_relu(y)
         y = F.normalize(y)
+        y = F.dropout(y, p=0.8)
         y = torch.cat([y,soft_scores],dim=1)
         y = self.linear2(y)
+        y = F.leaky_relu(y)
+        y = F.normalize(y)
+        y = F.dropout(y, p=0.8)
+        y= self.linear3(y)
         return y
 
 class BertForSequenceClassification(BertPreTrainedModel):
@@ -113,6 +125,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         beta:Optional[float]=1.0,
         alpha:Optional[float]=1.0,
         tmp: Optional[float] = 1,
+        ood_label: Optional[int]=-1,
     ) :
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -141,19 +154,25 @@ class BertForSequenceClassification(BertPreTrainedModel):
         cls_hidden_state = self.dropout(cls_hidden_state)
         sep_hidden_state = self.dropout(sep_hidden_state)
         classify_logits=self.classifier(cls_hidden_state)
+        classify_logits_id=classify_logits[(1 - binary_labels).bool()]
+        labels_id=labels[(1 - binary_labels).bool()]
         cls_copy=cls_hidden_state.clone().detach()
         cls_copy.requires_grad=True
-        binary_logits=self.binary_classifier(torch.cat([cls_copy,sep_hidden_state],dim=1),classify_logits)
+        copy_classify_logits=classify_logits.clone().detach()
+        copy_classify_logits.requires_grad=True
+        binary_logits=self.binary_classifier(torch.cat([cls_copy,sep_hidden_state],dim=1),copy_classify_logits)
         loss = None
         if labels is not None and binary_labels is not None:
             classify_loss_fct = CrossEntropyLoss(reduction='none')
             binary_loss_fct = CrossEntropyLoss()
-
-            classify_loss_seq = classify_loss_fct(torch.div(classify_logits.view(-1, self.num_labels), tmp),
-                                                  labels.view(-1))
-            pos_loss_seq = classify_loss_seq[(1 - binary_labels).bool()]
-            classify_loss = torch.div(torch.sum(pos_loss_seq), len(pos_loss_seq))
+            pos_loss_seq = classify_loss_fct(torch.div(classify_logits_id.view(-1, self.num_labels), tmp),
+                                                  labels_id.view(-1))
+            if len(pos_loss_seq)>0:
+                classify_loss = torch.div(torch.sum(pos_loss_seq), len(pos_loss_seq))
+            else:
+                classify_loss = 0
             binary_loss = binary_loss_fct(binary_logits.view(-1, 2), binary_labels.view(-1))
+            print(f"classify_loss:{classify_loss},binary:{binary_loss}")
             loss = alpha * classify_loss + beta * binary_loss
 
         return ClassifierOutput(

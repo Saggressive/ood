@@ -88,16 +88,17 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    # "filepath": downloaded_files["neg_train"],
-                    "filepath": downloaded_files["dev"],
+                    "filepath": downloaded_files["neg_train"],
+                    # "filepath": downloaded_files["dev"],
                     "mode":"neg_train"
                 },
             ),
             datasets.SplitGenerator(
                 name=datasets.Split.VALIDATION,
                 gen_kwargs={
-                    # "filepath": downloaded_files["neg_val"],
-                    "filepath": downloaded_files["dev"],
+                    "filepath": downloaded_files["neg_val"],
+                    # "filepath": downloaded_files["neg_train"],
+                    # "filepath": downloaded_files["dev"],
                     "mode": "neg_val"
                 },
             )
@@ -110,6 +111,10 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             with open(filepath, "r", encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter="\t", quotechar=None)
                 for idx, line in enumerate(reader):
+                    if idx==0:
+                        continue
+                    # if idx>=10000:
+                    #     continue
                     label = len(self.labels_dict_keys)
                     binary_label = 1
                     yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
