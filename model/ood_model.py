@@ -1,6 +1,7 @@
 from transformers.models.bert.modeling_bert import *
 from torch.nn import CrossEntropyLoss
 import torch.nn.functional as F
+import numpy as np
 logger = logging.get_logger(__name__)
 @dataclass
 class ClassifierOutput(ModelOutput):
@@ -125,7 +126,9 @@ class BertForSequenceClassification(BertPreTrainedModel):
         beta:Optional[float]=1.0,
         alpha:Optional[float]=1.0,
         tmp: Optional[float] = 1,
-        ood_label: Optional[int]=-1,
+        batch_size :Optional[int]=32,
+        ood_label: Optional[int]=37,
+        mode: Optional[str] = "eval",
     ) :
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -151,6 +154,26 @@ class BertForSequenceClassification(BertPreTrainedModel):
         last_layer_hidden_states=hidden_states[-1]
         cls_hidden_state = last_layer_hidden_states[:, 0, :]
         sep_hidden_state=last_layer_hidden_states[:, -1, :]
+        # if mode=="train":
+        #     # print(labels.size())
+        #     sep_convex_list, cls_convex_list = [], []
+        #     while len(sep_convex_list) < labels.size()[0]:
+        #         choice = np.random.uniform(0, 1, 1)
+        #         cdt = np.random.choice(batch_size, 2, replace=False)
+        #         if choice > 1 / 2:
+        #             cdt[1] = cdt[1] + labels.size()[0] - batch_size - 1
+        #         if labels[cdt[0]] != labels[cdt[1]] and ood_label not in cdt:
+        #             s = np.random.uniform(0, 1, 1)
+        #             cls_convex_list.append(s[0] * cls_hidden_state[cdt[0]] + (1 - s[0]) * cls_hidden_state[cdt[1]])
+        #             sep_convex_list.append(s[0] * sep_hidden_state[cdt[0]] + (1 - s[0]) * sep_hidden_state[cdt[1]])
+        #     # print("ok")
+        #     cls_convex_samples = torch.cat(cls_convex_list, dim=0).view(labels.size()[0], -1)
+        #     sep_convex_samples = torch.cat(sep_convex_list, dim=0).view(labels.size()[0], -1)
+        #     cls_hidden_state =torch.cat([cls_hidden_state,cls_convex_samples],dim=0).cuda()
+        #     sep_hidden_state =torch.cat([sep_hidden_state,sep_convex_samples],dim=0).cuda()
+        #     binary_labels = torch.cat([binary_labels,torch.tensor([1]*labels.size()[0]).cuda()],dim=0)
+        #     labels =torch.cat([labels,torch.tensor([ood_label]*labels.size()[0]).cuda()],dim=0)
+
         cls_hidden_state = self.dropout(cls_hidden_state)
         sep_hidden_state = self.dropout(sep_hidden_state)
         classify_logits=self.classifier(cls_hidden_state)
@@ -165,16 +188,18 @@ class BertForSequenceClassification(BertPreTrainedModel):
         if labels is not None and binary_labels is not None:
             classify_loss_fct = CrossEntropyLoss(reduction='none')
             binary_loss_fct = CrossEntropyLoss()
-            pos_loss_seq = classify_loss_fct(torch.div(classify_logits_id.view(-1, self.num_labels), tmp),
-                                                  labels_id.view(-1))
-            if len(pos_loss_seq)>0:
+            if len(classify_logits_id)>0:
+                pos_loss_seq = classify_loss_fct(torch.div(classify_logits_id.view(-1, self.num_labels), tmp),
+                                                 labels_id.view(-1))
                 classify_loss = torch.div(torch.sum(pos_loss_seq), len(pos_loss_seq))
             else:
                 classify_loss = 0
-            binary_loss = binary_loss_fct(binary_logits.view(-1, 2), binary_labels.view(-1))
+            binary_loss = binary_loss_fct(torch.div(binary_logits.view(-1, 2),tmp), binary_labels.view(-1))
             print(f"classify_loss:{classify_loss},binary:{binary_loss}")
+            if classify_loss<3.1:
+                alpha=alpha*0.5
+                # beta=beta*2
             loss = alpha * classify_loss + beta * binary_loss
-
         return ClassifierOutput(
             loss=loss,
             logits=classify_logits,

@@ -5,12 +5,12 @@ import json
 from tqdm import tqdm
 import json
 import numpy as np
-def evaluate_base(predict: numpy.ndarray,labels: numpy.ndarray) -> tuple:
+def evaluate_base(predict: numpy.ndarray,labels: numpy.ndarray,mode="macro") -> tuple:
 
     acc=accuracy_score(labels,predict)
     # precision=precision_score(labels,predict,average="macro",)
     # recall=recall_score(labels,predict,average="macro")
-    f1=f1_score(labels,predict,average="macro")
+    f1=f1_score(labels,predict,average=mode)
     # print(classification_report(labels,predict))
     return acc,f1
     # return acc

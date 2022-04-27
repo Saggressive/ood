@@ -5,7 +5,7 @@ import csv
 import torch
 from datasets.tasks import QuestionAnsweringExtractive
 from processdata.pre_process import get_label_dict
-
+import random
 logger = datasets.logging.get_logger(__name__)
 
 
@@ -150,6 +150,7 @@ class Ood_data(datasets.GeneratorBasedBuilder):
                     else:
                         label = self.labels_dict[line[1]]
                         binary_label = 0
+
                     yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
         else:
             raise ValueError("mode error")

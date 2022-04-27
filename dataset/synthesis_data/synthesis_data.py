@@ -5,7 +5,7 @@ import csv
 import torch
 from datasets.tasks import QuestionAnsweringExtractive
 from processdata.pre_process import get_label_dict
-
+import random
 logger = datasets.logging.get_logger(__name__)
 
 
@@ -32,9 +32,10 @@ from the corresponding reading passage, or the question might be unanswerable.
 
 _URL = "../../oos/"
 _URLS = {
-    "neg_train": _URL + "neg_train.tsv",
-    "neg_val": _URL + "neg_val.tsv",
+    "train": _URL + "train.tsv",
     "dev": _URL + "dev.tsv",
+    "test": _URL + "test.tsv",
+    "neg": _URL + "squad.tsv",
 }
 
 
@@ -88,35 +89,35 @@ class Ood_data(datasets.GeneratorBasedBuilder):
             datasets.SplitGenerator(
                 name=datasets.Split.TRAIN,
                 gen_kwargs={
-                    "filepath": downloaded_files["neg_train"],
+                    "filepath": downloaded_files["train"],
                     # "filepath": downloaded_files["dev"],
-                    "mode":"neg_train"
+                    "mode":"train"
                 },
             ),
-            datasets.SplitGenerator(
-                name=datasets.Split.VALIDATION,
-                gen_kwargs={
-                    "filepath": downloaded_files["neg_val"],
-                    # "filepath": downloaded_files["neg_train"],
-                    # "filepath": downloaded_files["dev"],
-                    "mode": "neg_val"
-                },
-            )
         ]
 
     def _generate_examples(self, filepath ,mode):
         """This function returns the examples in the raw (text) form."""
         logger.info("generating examples from = %s", filepath)
-        if mode=="neg_train" or mode=="neg_val":
+        if mode=="train":
             with open(filepath, "r", encoding='utf-8') as f:
                 reader = csv.reader(f, delimiter="\t", quotechar=None)
-                for idx, line in enumerate(reader):
-                    if idx==0:
-                        continue
-                    if idx>=30000:
-                        continue
-                    label = len(self.labels_dict_keys)
-                    binary_label = 1
-                    yield idx, {"text": line[0], "label": label, "binary_label": binary_label}
+                for k in range(4):
+                    for idx, line in enumerate(reader):
+                        if idx == 0:
+                            continue
+                        if idx>10:
+                            continue
+                        if line[1] not in self.labels_dict_keys:
+                            continue
+                        else:
+                            label = self.labels_dict[line[1]]
+                            binary_label = 0
+                            text_list = line[0].split(" ")
+                            random.shuffle(text_list)
+                            text = " ".join(text_list)
+                        yield idx, {"text": text, "label": label, "binary_label": binary_label}
+                    print("ok")
+
         else:
             raise ValueError("mode error")

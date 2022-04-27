@@ -125,7 +125,8 @@ def train(config:dict=None) ->None:
                 batch["labels"]=torch.cat([pos_batch["labels"],neg_batch["labels"]],dim=0)
                 output = model(input_ids=batch["input_ids"].to(device),
                                attention_mask=batch["attention_mask"].to(device),
-                               labels=batch["labels"].to(device), mode="train", use_soft=use_soft,tmp=config["tmp"])
+                               labels=batch["labels"].to(device), mode="train", use_soft=use_soft,
+                               batch_size=config["batch_size"],ood_label=len(labels_dict.keys()),tmp=config["tmp"])
                 ce_loss = output.loss
 
                 with torch.no_grad():
@@ -143,7 +144,8 @@ def train(config:dict=None) ->None:
             for i, batch in enumerate(train_loader):
                 output = model(input_ids=batch["input_ids"].to(device),
                                attention_mask=batch["attention_mask"].to(device),
-                               labels=batch["labels"].to(device), mode="train", use_soft=True,tmp=config["tmp"])
+                               labels=batch["labels"].to(device), mode="train", use_soft=True,
+                               batch_size=config["batch_size"],ood_label=len(labels_dict.keys()),tmp=config["tmp"])
                 ce_loss = output.loss
 
                 with torch.no_grad():
@@ -202,7 +204,8 @@ def eval(config,model,val_loader,device,labels_dict):
     for i, batch in enumerate(val_loader):
         with torch.no_grad():
             output = model(input_ids=batch["input_ids"].to(device),attention_mask=batch["attention_mask"].to(device),
-                           labels=batch["labels"].to(device),mode="val",tmp=config["val_tmp"])
+                           labels=batch["labels"].to(device),mode="val",batch_size=config["batch_size"],
+                           ood_label=len(labels_dict.keys()),tmp=config["val_tmp"])
             logits = output.logits.view(-1, config["num_labels"])
             logits=torch.div(logits,config["val_tmp"])
             logits=softmax(logits,dim=1)
@@ -273,7 +276,8 @@ def test(config,model,val_loader,device,labels_dict , op):
     for i, batch in enumerate(val_loader):
         with torch.no_grad():
             output = model(input_ids=batch["input_ids"].to(device),attention_mask=batch["attention_mask"].to(device),
-                           labels=batch["labels"].to(device),mode="val",tmp=config["val_tmp"])
+                           labels=batch["labels"].to(device),mode="val",
+                           batch_size=config["batch_size"],ood_label=len(labels_dict.keys()),tmp=config["val_tmp"])
             logits = output.logits.view(-1, config["num_labels"])
             logits = torch.div(logits, config["val_tmp"])
             logits = softmax(logits, dim=1)
