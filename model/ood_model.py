@@ -153,7 +153,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
         hidden_states = outputs.hidden_states
         last_layer_hidden_states=hidden_states[-1]
         cls_hidden_state = last_layer_hidden_states[:, 0, :]
-        sep_hidden_state=last_layer_hidden_states[:, -1, :]
+        # sep_hidden_state=last_layer_hidden_states[:, -1, :]
         # if mode=="train":
         #     # print(labels.size())
         #     sep_convex_list, cls_convex_list = [], []
@@ -175,35 +175,38 @@ class BertForSequenceClassification(BertPreTrainedModel):
         #     labels =torch.cat([labels,torch.tensor([ood_label]*labels.size()[0]).cuda()],dim=0)
 
         cls_hidden_state = self.dropout(cls_hidden_state)
-        sep_hidden_state = self.dropout(sep_hidden_state)
+        # sep_hidden_state = self.dropout(sep_hidden_state)
         classify_logits=self.classifier(cls_hidden_state)
-        classify_logits_id=classify_logits[(1 - binary_labels).bool()]
-        labels_id=labels[(1 - binary_labels).bool()]
-        cls_copy=cls_hidden_state.clone().detach()
-        cls_copy.requires_grad=True
-        copy_classify_logits=classify_logits.clone().detach()
-        copy_classify_logits.requires_grad=True
-        binary_logits=self.binary_classifier(torch.cat([cls_copy,sep_hidden_state],dim=1),copy_classify_logits)
+        # classify_logits_id=classify_logits[(1 - binary_labels).bool()]
+        # labels_id=labels[(1 - binary_labels).bool()]
+        # cls_copy=cls_hidden_state.clone().detach()
+        # cls_copy.requires_grad=True
+        # copy_classify_logits=classify_logits.clone().detach()
+        # copy_classify_logits.requires_grad=True
+        # binary_logits=self.binary_classifier(torch.cat([cls_copy,sep_hidden_state],dim=1),copy_classify_logits)
         loss = None
-        if labels is not None and binary_labels is not None:
-            classify_loss_fct = CrossEntropyLoss(reduction='none')
-            binary_loss_fct = CrossEntropyLoss()
-            if len(classify_logits_id)>0:
-                pos_loss_seq = classify_loss_fct(torch.div(classify_logits_id.view(-1, self.num_labels), tmp),
-                                                 labels_id.view(-1))
-                classify_loss = torch.div(torch.sum(pos_loss_seq), len(pos_loss_seq))
-            else:
-                classify_loss = 0
-            binary_loss = binary_loss_fct(torch.div(binary_logits.view(-1, 2),tmp), binary_labels.view(-1))
-            print(f"classify_loss:{classify_loss},binary:{binary_loss}")
-            if classify_loss<3.1:
-                alpha=alpha*0.5
-                # beta=beta*2
-            loss = alpha * classify_loss + beta * binary_loss
+        if labels is not None :
+            classify_loss_fct = CrossEntropyLoss()
+            classify_loss = classify_loss_fct(torch.div(classify_logits.view(-1, self.num_labels), tmp),
+                                                 labels.view(-1))
+            # binary_loss_fct = CrossEntropyLoss()
+            # if len(classify_logits_id)>0:
+            #     pos_loss_seq = classify_loss_fct(torch.div(classify_logits_id.view(-1, self.num_labels), tmp),
+            #                                      labels_id.view(-1))
+            #     classify_loss = torch.div(torch.sum(pos_loss_seq), len(pos_loss_seq))
+            # else:
+            #     classify_loss = 0
+            # binary_loss = binary_loss_fct(torch.div(binary_logits.view(-1, 2),tmp), binary_labels.view(-1))
+            # print(f"classify_loss:{classify_loss},binary:{binary_loss}")
+            # if classify_loss<3.1:
+            #     alpha=alpha*0.5
+            print(f"classify_loss:{classify_loss}")
+
+            loss = alpha * classify_loss
         return ClassifierOutput(
             loss=loss,
             logits=classify_logits,
-            binary_logits=binary_logits,
+            binary_logits=torch.tensor([[-1,-1]]*classify_logits.size()[0]),
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )

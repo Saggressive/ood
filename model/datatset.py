@@ -6,10 +6,11 @@ from transformers import BertTokenizer
 import torch
 import random
 class synthesis_data(Dataset):
-    def __init__(self,train_data_path,labels_dict):
+    def __init__(self,train_data_path,labels_dict,pos_len):
         super(synthesis_data).__init__()
         self.lines=[]
         self.labels_dict=labels_dict
+        self.pos_len=pos_len
         with open(train_data_path, "r", encoding='utf-8') as f:
             reader = csv.reader(f, delimiter="\t", quotechar=None)
             for idx, line in enumerate(reader):
@@ -17,7 +18,7 @@ class synthesis_data(Dataset):
                     self.lines.append(line)
 
     def __len__(self):
-        return len(self.lines)*8
+        return self.pos_len
 
     def __getitem__(self, item):
         while(1):
@@ -25,34 +26,76 @@ class synthesis_data(Dataset):
             if self.lines[cdt[0]][1]==self.lines[cdt[1]][1]:
                 continue
             else:
-                choice = np.random.random()
-                if choice>1/2:
-                    text0_list=self.lines[cdt[0]][0].split(" ")
-                    text1_list=self.lines[cdt[1]][0].split(" ")
-                    min_len=min(len(text0_list),len(text1_list))
-
-                    random_array = np.random.randint(0, 2, min_len)
-                    syn_list=[]
-                    for i in range(min_len):
-                        if random_array[i]==0:
-                            syn_list.append(text0_list[i])
-                        else:
-                            syn_list.append(text1_list[i])
-                    return " ".join(syn_list)
-                else:
-                    text0_list = self.lines[cdt[0]][0].split(" ")
-                    text1_list = self.lines[cdt[1]][0].split(" ")
-                    text0_len,text1_len=len(text0_list),len(text1_list)
+                # choice = np.random.random()
+                text0_list = self.lines[cdt[0]][0].split(" ")
+                text1_list = self.lines[cdt[1]][0].split(" ")
+                # min_len = min(len(text0_list), len(text1_list))
+                if random.random()<1/3:
                     syn_list = []
-                    cdt = [0,1]
-                    random.shuffle(cdt)
-                    text0_split=text0_list[0+cdt[0]*int(text0_len/2):int(text0_len/2)+cdt[0]*int(text0_len/2)]
-                    text1_split=text1_list[0+cdt[1]*int(text1_len/2):int(text1_len/2)+cdt[1]*int(text1_len/2)]
-                    syn_list.extend(text0_split[0:int(len(text0_split)/2)])
-                    syn_list.extend(text1_split[0:int(len(text1_split)/2)])
-                    syn_list.extend(text0_split[int(len(text0_split)/2):])
-                    syn_list.extend(text1_split[int(len(text1_split)/2):])
-                    return " ".join(syn_list)
+                    syn_list.extend(text0_list)
+                    syn_list.extend(text1_list)
+                    random.shuffle(syn_list)
+                    syn_list_half =syn_list[0:int(len(syn_list)/2)]
+                else:
+                    min_len = min(len(text0_list), len(text1_list))
+                    if min_len<3:
+                        continue
+                    max_len = max(len(text0_list), len(text1_list))
+                    random_array = np.random.randint(0, 2, max_len)
+                    syn_list = []
+                    j=0
+                    for i in range(max_len):
+                        if i <min_len:
+                            if random_array[i] == 0:
+                                syn_list.append(text0_list[i])
+                            else:
+                                syn_list.append(text1_list[i])
+                        else:
+                            if random_array[i] == 0:
+                                if len(text0_list)>min_len:
+                                    syn_list.append(text0_list[i])
+                                else:
+                                    syn_list.append(text0_list[j])
+                                    j+=1
+                                    if j>=min_len:
+                                        j=0
+                            else:
+                                if len(text1_list)>min_len:
+                                    syn_list.append(text1_list[i])
+                                else:
+                                    syn_list.append(text1_list[j])
+                                    j+=1
+                                    if j>=min_len:
+                                        j=0
+                    syn_list_half=syn_list[0:len(syn_list)//2]
+                return " ".join(syn_list_half)
+                # if choice>1/2:
+                #     text0_list=self.lines[cdt[0]][0].split(" ")
+                #     text1_list=self.lines[cdt[1]][0].split(" ")
+                #     min_len=min(len(text0_list),len(text1_list))
+                #
+                    # random_array = np.random.randint(0, 2, min_len)
+                    # syn_list=[]
+                    # for i in range(min_len):
+                    #     if random_array[i]==0:
+                    #         syn_list.append(text0_list[i])
+                    #     else:
+                    #         syn_list.append(text1_list[i])
+                    # return " ".join(syn_list)
+                # else:
+                #     text0_list = self.lines[cdt[0]][0].split(" ")
+                #     text1_list = self.lines[cdt[1]][0].split(" ")
+                #     text0_len,text1_len=len(text0_list),len(text1_list)
+                #     syn_list = []
+                #     cdt = [0,1]
+                #     random.shuffle(cdt)
+                #     text0_split=text0_list[0+cdt[0]*int(text0_len/2):int(text0_len/2)+cdt[0]*int(text0_len/2)]
+                #     text1_split=text1_list[0+cdt[1]*int(text1_len/2):int(text1_len/2)+cdt[1]*int(text1_len/2)]
+                #     syn_list.extend(text0_split[0:int(len(text0_split)/2)])
+                #     syn_list.extend(text1_split[0:int(len(text1_split)/2)])
+                #     syn_list.extend(text0_split[int(len(text0_split)/2):])
+                #     syn_list.extend(text1_split[int(len(text1_split)/2):])
+                #     return " ".join(syn_list)
 class DataCollator():
     def __init__(self,tokenizer,labels_dict,config):
         self.tokenizer=tokenizer
@@ -67,8 +110,8 @@ class DataCollator():
             truncation=True,
             return_overflowing_tokens=False,
         )
-        model_inputs["labels"] = torch.tensor([len(self.labels_dict)]*self.config["batch_size"])
-        model_inputs["binary_labels"] = torch.tensor([1]*self.config["batch_size"])
+        model_inputs["labels"] = torch.tensor([len(self.labels_dict)]*len(item))
+        model_inputs["binary_labels"] = torch.tensor([1]*len(item))
         batch = self.tokenizer.pad(
             model_inputs,
             padding="max_length",

@@ -4,7 +4,6 @@ import datasets
 import csv
 import torch
 from datasets.tasks import QuestionAnsweringExtractive
-from processdata.pre_process import get_label_dict
 import random
 logger = datasets.logging.get_logger(__name__)
 

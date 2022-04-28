@@ -13,7 +13,7 @@ def evaluate_base(predict: numpy.ndarray,labels: numpy.ndarray,mode="macro") -> 
     f1=f1_score(labels,predict,average=mode)
     # print(classification_report(labels,predict))
     return acc,f1
-    # return acc
+
 def evaluate_acc(predict: numpy.ndarray,labels: numpy.ndarray) -> tuple:
 
     acc=accuracy_score(labels,predict)

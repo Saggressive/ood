@@ -4,7 +4,6 @@ import datasets
 import csv
 import torch
 from datasets.tasks import QuestionAnsweringExtractive
-from processdata.pre_process import get_label_dict
 
 logger = datasets.logging.get_logger(__name__)
 
@@ -113,7 +112,7 @@ class Ood_data(datasets.GeneratorBasedBuilder):
                 for idx, line in enumerate(reader):
                     if idx==0:
                         continue
-                    if idx>=30000:
+                    if idx>=50000:
                         continue
                     label = len(self.labels_dict_keys)
                     binary_label = 1

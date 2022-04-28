@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+import random
 def get_four_fold(pos_batch,config):
     synthesis_batch = {}
     synthesis_input_ids_list, synthesis_mask_list, synthesis_labels_list, synthesis_binary_list = [], [], [], []
@@ -72,7 +73,8 @@ def get_four_fold(pos_batch,config):
 #     synthesis_batch["labels"], synthesis_batch["binary_labels"] = synthesis_labels, synthesis_binary
 #     return synthesis_batch
 
-def get_two(pos_batch,config):
+def get_two(pos_batch,config,labels_dict):
+    num_labels=len(labels_dict)
     synthesis_batch = {}
     synthesis_input_ids_list, synthesis_mask_list, synthesis_labels_list, synthesis_binary_list = [], [], [], []
     while len(synthesis_input_ids_list) < int(config["neg_multiple"]) * len(pos_batch["input_ids"]):
@@ -80,7 +82,7 @@ def get_two(pos_batch,config):
         if len(pos_batch["attention_mask"]) <= cdt[0] or len(pos_batch["attention_mask"]) <= cdt[1]:
             continue
         min_len = min(sum(pos_batch["attention_mask"][cdt[0]]), sum(pos_batch["attention_mask"][cdt[1]]))
-        if min_len<5:
+        if min_len<6:
             continue
         if pos_batch["labels"][cdt[0]] != pos_batch["labels"][cdt[1]] and config["num_labels"] not in cdt:
             random_array = torch.tensor(np.random.randint(0, 2, min_len.item()))
@@ -91,9 +93,13 @@ def get_two(pos_batch,config):
                 [1 - random_array, torch.tensor([0] * (len(pos_batch["attention_mask"][cdt[1]]) - min_len))])
             synthesis_input = cdt_random_arry0 * cdt_input0 + cdt_random_arry1 * cdt_input1
             synthesis_input[min_len - 1] = torch.tensor(102)
+            if random.random()>1/3:
+                b=synthesis_input[1:min_len-1]
+                b = b[torch.randperm(b.size(0))]
+                synthesis_input[1:min_len-1]=b[:]
             synthesis_input_ids_list.append(synthesis_input)
             synthesis_mask_list.append((~(synthesis_input == 0)).int())
-            synthesis_labels_list.append(torch.tensor(config["num_labels"]))
+            synthesis_labels_list.append(torch.tensor(num_labels))
             synthesis_binary_list.append(torch.tensor(1))
     synthesis_input_ids = torch.stack(synthesis_input_ids_list, dim=0)
     synthesis_mask = torch.stack(synthesis_mask_list, dim=0)
