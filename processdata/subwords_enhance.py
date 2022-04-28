@@ -93,7 +93,7 @@ def get_two(pos_batch,config,labels_dict):
                 [1 - random_array, torch.tensor([0] * (len(pos_batch["attention_mask"][cdt[1]]) - min_len))])
             synthesis_input = cdt_random_arry0 * cdt_input0 + cdt_random_arry1 * cdt_input1
             synthesis_input[min_len - 1] = torch.tensor(102)
-            if random.random()>1/3:
+            if random.random()>1/2:
                 b=synthesis_input[1:min_len-1]
                 b = b[torch.randperm(b.size(0))]
                 synthesis_input[1:min_len-1]=b[:]

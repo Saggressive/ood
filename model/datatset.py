@@ -30,7 +30,7 @@ class synthesis_data(Dataset):
                 text0_list = self.lines[cdt[0]][0].split(" ")
                 text1_list = self.lines[cdt[1]][0].split(" ")
                 # min_len = min(len(text0_list), len(text1_list))
-                if random.random()<1/3:
+                if random.random()<1/2:
                     syn_list = []
                     syn_list.extend(text0_list)
                     syn_list.extend(text1_list)

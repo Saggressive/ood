@@ -502,7 +502,7 @@ def main_test(config):
 
 if __name__=="__main__":
     #只需要修改save_dir 和 tb_folder
-    save_dir="./best_model_idea_binary"
+    save_dir="./best_model_idea_binary_v1"
     config={
         "pretrained_path":"./bert-base-uncased",
         "data_path":"./oos",
@@ -530,10 +530,10 @@ if __name__=="__main__":
         "beta":0.0,
         "neg_multiple":6,
         "cache_dir":"cache_v1",
-        "tb_folder": "./tb_folder_idea_binary",
+        "tb_folder": "./tb_folder_idea_binary_v1",
         "know_rate": 0.25,
         "batch_size": 96,
     }
-    # train(config)
+    train(config)
     # eval(config)
-    main_test(config)
+    # main_test(config)
