@@ -1,5 +1,6 @@
-import numpy as np
-
+import torch
 if __name__=="__main__":
-    a=np.array([1,2,3,4,5])
-    print(a[0:2])
+    a=torch.tensor(1)
+    print(torch.typename(a))
+    a.float()
+    print(torch.typename(a))

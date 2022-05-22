@@ -72,7 +72,8 @@ class binary_model(nn.Module):
         self.moudle4 = classification_moudle(self.hidden_size)
         self.linear1 = nn.Linear(self.hidden_size+self.softmax_size, int(self.hidden_size / 2))
         self.linear2 = nn.Linear(int(self.hidden_size / 2)+self.softmax_size, int(self.hidden_size / 4))
-        self.linear3 = nn.Linear(int(self.hidden_size / 4)+self.softmax_size,self.output_size)
+        self.linear3 = nn.Linear(int(self.hidden_size / 4)+self.softmax_size, 64)
+        self.linear4 = nn.Linear(64+self.softmax_size,self.output_size)
 
     def forward(self, x , soft_scores):
         y = self.moudle1(x)
@@ -80,18 +81,19 @@ class binary_model(nn.Module):
         y = self.moudle3(y)
         y = self.moudle4(y)
         y = torch.cat([y,soft_scores],dim=1)
-        y = F.normalize(y)
         y = self.linear1(y)
         y = F.leaky_relu(y)
+        y = F.normalize(y)
         y = F.dropout(y, p=0.6)
         y = torch.cat([y,soft_scores],dim=1)
-        y = F.normalize(y)
         y = self.linear2(y)
         y = F.leaky_relu(y)
         y = F.normalize(y)
-        y = F.dropout(y, p=0.6)
+        # y = F.dropout(y, p=0.6)
         y = torch.cat([y, soft_scores], dim=1)
         y= self.linear3(y)
+        y = torch.cat([y, soft_scores], dim=1)
+        y=self.linear4(y)
         return y
 
 class BertForSequenceClassification(BertPreTrainedModel):
@@ -156,27 +158,25 @@ class BertForSequenceClassification(BertPreTrainedModel):
         last_layer_hidden_states=hidden_states[-1]
         cls_hidden_state = last_layer_hidden_states[:, 0, :]
         sep_hidden_state=last_layer_hidden_states[:, -1, :]
-
         # if mode=="train":
         #     # print(labels.size())
         #     sep_convex_list, cls_convex_list = [], []
-        #     s_batch=batch_size
-        #     while len(sep_convex_list) < s_batch:
+        #     while len(sep_convex_list) < labels.size()[0]:
         #         choice = np.random.uniform(0, 1, 1)
         #         cdt = np.random.choice(batch_size, 2, replace=False)
-        #         if choice > 1 / 2:#ood+id 和 id+id各一半
+        #         if choice > 1 / 2:
         #             cdt[1] = cdt[1] + labels.size()[0] - batch_size - 1
         #         if labels[cdt[0]] != labels[cdt[1]] and ood_label not in cdt:
         #             s = np.random.uniform(0, 1, 1)
         #             cls_convex_list.append(s[0] * cls_hidden_state[cdt[0]] + (1 - s[0]) * cls_hidden_state[cdt[1]])
         #             sep_convex_list.append(s[0] * sep_hidden_state[cdt[0]] + (1 - s[0]) * sep_hidden_state[cdt[1]])
         #     # print("ok")
-        #     cls_convex_samples = torch.cat(cls_convex_list, dim=0).view(s_batch, -1)
-        #     sep_convex_samples = torch.cat(sep_convex_list, dim=0).view(s_batch, -1)
+        #     cls_convex_samples = torch.cat(cls_convex_list, dim=0).view(labels.size()[0], -1)
+        #     sep_convex_samples = torch.cat(sep_convex_list, dim=0).view(labels.size()[0], -1)
         #     cls_hidden_state =torch.cat([cls_hidden_state,cls_convex_samples],dim=0).cuda()
         #     sep_hidden_state =torch.cat([sep_hidden_state,sep_convex_samples],dim=0).cuda()
-        #     binary_labels = torch.cat([binary_labels,torch.tensor([1]*s_batch).cuda()],dim=0)
-        #     labels =torch.cat([labels,torch.tensor([ood_label]*s_batch).cuda()],dim=0)
+        #     binary_labels = torch.cat([binary_labels,torch.tensor([1]*labels.size()[0]).cuda()],dim=0)
+        #     labels =torch.cat([labels,torch.tensor([ood_label]*labels.size()[0]).cuda()],dim=0)
 
         cls_hidden_state = self.dropout(cls_hidden_state)
         sep_hidden_state = self.dropout(sep_hidden_state)
@@ -187,11 +187,11 @@ class BertForSequenceClassification(BertPreTrainedModel):
         labels_ood = torch.tensor([a]*classify_logits_ood.size()[0])
         labels_id = labels[(1 - binary_labels).bool()]
         labels_ood=labels_ood.cuda()
-        cls_copy = cls_hidden_state.clone().detach()
-        cls_copy.requires_grad = True
-        copy_classify_logits = classify_logits.clone().detach()
-        copy_classify_logits.requires_grad = True
-        binary_logits = self.binary_classifier(torch.cat([cls_copy, sep_hidden_state], dim=1), copy_classify_logits)
+        # cls_copy = cls_hidden_state.clone().detach()
+        # cls_copy.requires_grad = True
+        # copy_classify_logits = classify_logits.clone().detach()
+        # copy_classify_logits.requires_grad = True
+        binary_logits = self.binary_classifier(torch.cat([cls_hidden_state, sep_hidden_state], dim=1), classify_logits)
         loss = None
         if labels is not None and binary_labels is not None:
             classify_loss_fct = CrossEntropyLoss(reduction='none')
@@ -205,7 +205,7 @@ class BertForSequenceClassification(BertPreTrainedModel):
                 neg_loss_seq = soft_logits(classify_logits_ood.view(-1, self.num_labels),labels_ood.view(-1, self.num_labels),
                                            mode="no reduction", tmp=tmp)
                 classify_loss+=torch.div(torch.sum(neg_loss_seq),len(neg_loss_seq))
-            # classify_loss=classify_loss_fct(torch.div(classify_logits.view(-1, self.num_labels), 0.2),labels.view(-1))
+
             binary_loss = binary_loss_fct(torch.div(binary_logits.view(-1, 2), tmp), binary_labels.view(-1))
             print(f"classify_loss:{classify_loss},binary:{binary_loss}")
             # if classify_loss < 3.1:

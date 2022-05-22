@@ -112,7 +112,7 @@ class Ood_data(datasets.GeneratorBasedBuilder):
                 for idx, line in enumerate(reader):
                     if idx==0:
                         continue
-                    if idx>=50000:
+                    if idx>=60000:
                         continue
                     label = len(self.labels_dict_keys)
                     binary_label = 1

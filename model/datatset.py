@@ -23,52 +23,68 @@ class synthesis_data(Dataset):
     def __getitem__(self, item):
         while(1):
             cdt = np.random.choice(len(self.lines), 2, replace=False)
+            text0_list = self.lines[cdt[0]][0].split(" ")
+            text1_list = self.lines[cdt[1]][0].split(" ")
             if self.lines[cdt[0]][1]==self.lines[cdt[1]][1]:
+                continue
+            elif len(text1_list)<2 or len(text0_list)<2:
                 continue
             else:
                 # choice = np.random.random()
-                text0_list = self.lines[cdt[0]][0].split(" ")
-                text1_list = self.lines[cdt[1]][0].split(" ")
                 # min_len = min(len(text0_list), len(text1_list))
-                if random.random()<1/2:
-                    syn_list = []
+                syn_list = []
+                if random.random()<1/2:#词语词之间犬牙交错
+                    sum_len=len(text0_list)+len(text1_list)
+                    random_array = torch.tensor(np.random.randint(0, 2, sum_len))
+                    index_0,index_1=0,0
+                    for i in random_array:
+                        if i==0:
+                            if index_0>=len(text0_list):
+                                break
+                            syn_list.append(text0_list[index_0])
+                            index_0+=1
+                        elif i==1:
+                            if index_1>=len(text1_list):
+                                break
+                            syn_list.append(text1_list[index_1])
+                            index_1+=1
+                else:
                     syn_list.extend(text0_list)
                     syn_list.extend(text1_list)
-                    random.shuffle(syn_list)
-                    syn_list_half =syn_list[0:int(len(syn_list)/2)]
-                else:
-                    min_len = min(len(text0_list), len(text1_list))
-                    if min_len<3:
-                        continue
-                    max_len = max(len(text0_list), len(text1_list))
-                    random_array = np.random.randint(0, 2, max_len)
-                    syn_list = []
-                    j=0
-                    for i in range(max_len):
-                        if i <min_len:
-                            if random_array[i] == 0:
-                                syn_list.append(text0_list[i])
-                            else:
-                                syn_list.append(text1_list[i])
-                        else:
-                            if random_array[i] == 0:
-                                if len(text0_list)>min_len:
-                                    syn_list.append(text0_list[i])
-                                else:
-                                    syn_list.append(text0_list[j])
-                                    j+=1
-                                    if j>=min_len:
-                                        j=0
-                            else:
-                                if len(text1_list)>min_len:
-                                    syn_list.append(text1_list[i])
-                                else:
-                                    syn_list.append(text1_list[j])
-                                    j+=1
-                                    if j>=min_len:
-                                        j=0
-                    syn_list_half=syn_list[0:len(syn_list)//2]
-                return " ".join(syn_list_half)
+                    # syn_list_half=syn_list
+                # else:
+                #     min_len = min(len(text0_list), len(text1_list))
+                #     if min_len<2:
+                #         continue
+                #     max_len = max(len(text0_list), len(text1_list))
+                #     random_array = np.random.randint(0, 2, max_len)
+                #     syn_list = []
+                #     j=0
+                #     for i in range(max_len):
+                #         if i <min_len:
+                #             if random_array[i] == 0:
+                #                 syn_list.append(text0_list[i])
+                #             else:
+                #                 syn_list.append(text1_list[i])
+                #         else:
+                #             if random_array[i] == 0:
+                #                 if len(text0_list)>min_len:
+                #                     syn_list.append(text0_list[i])
+                #                 else:
+                #                     syn_list.append(text0_list[j])
+                #                     j+=1
+                #                     if j>=min_len:
+                #                         j=0
+                #             else:
+                #                 if len(text1_list)>min_len:
+                #                     syn_list.append(text1_list[i])
+                #                 else:
+                #                     syn_list.append(text1_list[j])
+                #                     j+=1
+                #                     if j>=min_len:
+                #                         j=0
+                #     syn_list_half=syn_list[0:len(syn_list)]
+                return " ".join(syn_list)
                 # if choice>1/2:
                 #     text0_list=self.lines[cdt[0]][0].split(" ")
                 #     text1_list=self.lines[cdt[1]][0].split(" ")

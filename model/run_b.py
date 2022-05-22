@@ -19,13 +19,15 @@ from torch.nn.functional import softmax
 import tensorboard_logger as tb_logger
 import numpy as np
 import warnings
+from sklearn.metrics import precision_score,recall_score
 warnings.filterwarnings("ignore")
+os.environ["CUDA_VISIBLE_DEVICES"]="0"
 def train(config:dict=None) ->None:
     logger = tb_logger.Logger(logdir=config["tb_folder"], flush_secs=2)
     labels_dict=get_label_dict(config["data_path"],config["know_rate"])
     print(labels_dict)
     tokenizer = BertTokenizer.from_pretrained(config["pretrained_path"])
-    model = BertForSequenceClassification.from_pretrained(config["pretrained_path"], num_labels=len(labels_dict.keys())+1)
+    model = BertForSequenceClassification.from_pretrained(config["pretrained_path"], num_labels=len(labels_dict.keys()))
     model.config.output_hidden_states = True
     datacollator = DataCollatorWithPadding(
         tokenizer=tokenizer,
@@ -35,7 +37,7 @@ def train(config:dict=None) ->None:
         return_tensors='pt'
     )
 
-    config["num_labels"]=len(labels_dict.keys())+1
+    config["num_labels"]=len(labels_dict.keys())
     dataset = load_dataset(config["train_script_path"],labels_dict=labels_dict,cache_dir=config["cache_dir"])
     train_dataset,val_dataset,test_dataset=dataset["train"],dataset["validation"],dataset["test"]
     if config["use_neg"]:
@@ -48,7 +50,7 @@ def train(config:dict=None) ->None:
             load_from_cache_file=False  # not data_training_args.overwrite_cache,
         )
         neg_train_dataset=neg_train_dataset.remove_columns(['text','label','binary_label'])
-        neg_train_loader = DataLoader(neg_train_dataset, batch_size=config["neg_multiple"]*config["batch_size"]//2, collate_fn=datacollator, shuffle=True)
+        neg_train_loader = DataLoader(neg_train_dataset, batch_size=2*config["batch_size"], collate_fn=datacollator, shuffle=True)
 
         neg_val_dataset = neg_val_dataset.map(
             lambda batch: tokenizer_process(batch, tokenizer, config["token_length"]),
@@ -57,7 +59,7 @@ def train(config:dict=None) ->None:
             load_from_cache_file=False  # not data_training_args.overwrite_cache,
         )
         neg_val_dataset = neg_val_dataset.remove_columns(['text', 'label', 'binary_label'])
-        neg_val_loader = DataLoader(neg_val_dataset, batch_size=config["neg_multiple"]*config["batch_size"]//2, collate_fn=datacollator,
+        neg_val_loader = DataLoader(neg_val_dataset, batch_size=2*config["batch_size"], collate_fn=datacollator,
                                       shuffle=True)
     train_dataset = train_dataset.map(
         lambda batch: tokenizer_process(batch, tokenizer, config["token_length"]),
@@ -65,17 +67,6 @@ def train(config:dict=None) ->None:
         num_proc=1,
         load_from_cache_file=False  # not data_training_args.overwrite_cache,
     )
-
-    # if config["use_balance"]==False:#如果是使用soft-softmax还要做修改
-    #     target = []
-    #     for i in train_dataset:
-    #         target.append(i["labels"])
-    #     target = torch.tensor(target)
-    #     class_sample_count = torch.tensor(
-    #         [(target == t).sum() for t in torch.unique(target, sorted=True)])
-    #     weight = 1. / class_sample_count.float()
-    #     samples_weight = torch.tensor([weight[t["labels"]] for t in train_dataset])
-    #     sampler = WeightedRandomSampler(samples_weight, len(samples_weight), replacement=True)
 
     val_dataset=val_dataset.map(
         lambda batch:tokenizer_process(batch,tokenizer,config["token_length"]),
@@ -127,19 +118,19 @@ def train(config:dict=None) ->None:
     labels_dict_path = config["save_dir"] + os.sep + 'dict.txt'
     with open(labels_dict_path, "w") as f:
         json.dump(labels_dict, f, indent=4)
-    eval(config, model, val_loader, neg_val_loader, device, labels_dict)
-
+    # eval(config, model, val_loader, neg_val_loader, device, labels_dict)
+    test(config, model, test_loader, device, labels_dict)
     for index in range(config["epoch"]):
         model.train()
         epoch_train_loss=0
-        dataset = synthesis_data("oos/train.tsv", labels_dict,config["neg_multiple"]*(len(train_dataset)+config["batch_size"]))
+        dataset = synthesis_data("oos/train.tsv", labels_dict,4*(len(train_dataset)+config["batch_size"]))
         collator = DataCollator(tokenizer, labels_dict, config)
-        syn_dataloader = DataLoader(dataset, batch_size=config["batch_size"]*config["neg_multiple"], shuffle=True,
+        syn_dataloader = DataLoader(dataset, batch_size=config["batch_size"]*4, shuffle=True,
                                     collate_fn=collator, drop_last=True)
 
         if config["use_neg"]==True:
-            # assert len(train_loader) <= len(neg_train_loader)
-            # assert len(train_loader) <= len(syn_dataloader)
+            assert len(train_loader) <= len(neg_train_loader)
+            assert len(train_loader) <= len(syn_dataloader)
             for i, (pos_batch,neg_batch,syn_batch) in enumerate(zip(train_loader,neg_train_loader,syn_dataloader)):
                 batch={}
                 batch["input_ids"]=torch.cat([pos_batch["input_ids"],neg_batch["input_ids"]],dim=0)
@@ -158,9 +149,9 @@ def train(config:dict=None) ->None:
                 batch["labels"] = torch.cat([batch["labels"], syn_batch["labels"]], dim=0)
                 batch["binary_labels"] = torch.cat([batch["binary_labels"], syn_batch["binary_labels"]], dim=0)
 
-                output = model(input_ids=batch["input_ids"].to(device),
-                               attention_mask=batch["attention_mask"].to(device),
-                               labels=batch["labels"].to(device), binary_labels=batch["binary_labels"].to(device),
+                output = model(input_ids=batch["input_ids"].to(device).long(),
+                               attention_mask=batch["attention_mask"].to(device).long(),
+                               labels=batch["labels"].to(device).long(), binary_labels=batch["binary_labels"].to(device).long(),
                                alpha=config["alpha"],beta=config["beta"],mode="train",
                                batch_size=config["batch_size"],ood_label=len(labels_dict.keys()),tmp=config["tmp"])
                 ce_loss = output.loss
@@ -170,7 +161,7 @@ def train(config:dict=None) ->None:
 
                 ce_loss = ce_loss / config["accumulation_steps"]
                 ce_loss.backward()
-                # accelerator.backward(loss)
+                # accelerator.backward(loss)ba
                 if ((i + 1) % config["accumulation_steps"]) == 0:
                     optimizer.step()
                     optimizer.zero_grad()
@@ -353,10 +344,11 @@ def test(config,model,val_loader,device,labels_dict):
 
     all_predict, all_labels = all_predict.numpy(), all_labels.numpy()
 
-    # for index, item in enumerate(all_binary_predict.clone()):
-    #     if item == torch.tensor(1):
-    #         all_predict[index] = len(labels_dict.keys())
+    for index, item in enumerate(all_binary_predict.clone()):
+        if item == torch.tensor(1):
+            all_predict[index] = len(labels_dict.keys())
     acc, f1_list = evaluate_base(all_predict, all_labels,mode=None)
+    precision,recall=precision_score(all_labels,all_predict,average=None),recall_score(all_labels,all_predict,average=None)
     f1=np.mean(f1_list)
     know_f1=np.mean(f1_list[0:-1])
     unknow_f1=f1_list[-1]
@@ -374,11 +366,14 @@ def test(config,model,val_loader,device,labels_dict):
 
     # return acc,f1,epoch_val_loss
     print("test")
-    print(f"{acc},{f1}")
+    print(f"overall:{acc},{f1}")
     print(f"ood:{ood_acc},{unknow_f1}")
+    print(f"ood precision:{precision[-1]},ood recall:{recall[-1]}")
     print(f"id:{id_acc},{know_f1}")
+    print(f"id precision:{np.mean(precision[0:-1])},id recall:{np.mean(recall[0:-1])}")
     print(f"binary:{binary_acc},{binary_f1}")
     return acc, f1, ood_acc, unknow_f1
+
 def eval(config,model,pos_val_loader,neg_val_loader,device,labels_dict):
     model.eval()
     model.to(device)
@@ -430,33 +425,57 @@ def eval(config,model,pos_val_loader,neg_val_loader,device,labels_dict):
     best_f1,best_op,best_acc=-1,-1,-1
     best_ood_acc,best_ood_f1=-1,-1
 
-    # for index, item in enumerate(all_binary_predict.clone()):
-    #     if item==torch.tensor(1):
-    #         all_predict[index]=len(labels_dict.keys())
-    acc,  f1 = evaluate_base(all_predict, all_labels)
-    ood_labels_binary=(all_labels==len(labels_dict.keys()))
-    ood_labels=all_labels[ood_labels_binary]
-    ood_predict=all_predict[ood_labels_binary]
-    ood_acc,ood_f1=evaluate_base(ood_predict,ood_labels,mode="weighted")
+    for index, item in enumerate(all_binary_predict.clone()):
+        if item==torch.tensor(1):
+            all_predict[index]=len(labels_dict.keys())
+    # acc,  f1 = evaluate_base(all_predict, all_labels)
+    # ood_labels_binary=(all_labels==len(labels_dict.keys()))
+    # ood_labels=all_labels[ood_labels_binary]
+    # ood_predict=all_predict[ood_labels_binary]
+    # ood_acc,ood_f1=evaluate_base(ood_predict,ood_labels,mode="weighted")
+    #
+    # id_labels = all_labels[~ood_labels_binary]
+    # id_predict = all_predict[~ood_labels_binary]
+    # id_acc, id_f1 = evaluate_base(id_predict, id_labels)
+    # all_binary_labels, all_binary_predict = all_binary_labels.numpy(), all_binary_predict.numpy()
+    # binary_acc,binary_f1=evaluate_base(all_binary_predict,all_binary_labels)
+    # if f1>best_f1:
+    #     best_f1=f1
+    #     best_acc=acc
+    #     best_ood_acc=ood_acc
+    #     best_ood_f1=ood_f1
+    #
+    # # return acc,f1,epoch_val_loss
+    # print("eval")
+    # print(f"{best_acc},{best_f1}")
+    # print(f"ood:{best_ood_acc},{best_ood_f1}")
+    # print(f"id:{id_acc},{id_f1}")
+    # print(f"binary:{binary_acc},{binary_f1}")
+    # return best_acc, best_f1, best_ood_acc, best_ood_f1
+
+    acc, f1_list = evaluate_base(all_predict, all_labels, mode=None)
+
+    f1 = np.mean(f1_list)
+    know_f1 = np.mean(f1_list[0:-1])
+    unknow_f1 = f1_list[-1]
+    ood_labels_binary = (all_labels == len(labels_dict.keys()))
+    ood_labels = all_labels[ood_labels_binary]
+    ood_predict = all_predict[ood_labels_binary]
+    ood_acc, ood_f1 = evaluate_base(ood_predict, ood_labels, mode="weighted")
 
     id_labels = all_labels[~ood_labels_binary]
     id_predict = all_predict[~ood_labels_binary]
     id_acc, id_f1 = evaluate_base(id_predict, id_labels)
     all_binary_labels, all_binary_predict = all_binary_labels.numpy(), all_binary_predict.numpy()
-    binary_acc,binary_f1=evaluate_base(all_binary_predict,all_binary_labels)
-    if f1>best_f1:
-        best_f1=f1
-        best_acc=acc
-        best_ood_acc=ood_acc
-        best_ood_f1=ood_f1
+    binary_acc, binary_f1 = evaluate_base(all_binary_predict, all_binary_labels)
 
     # return acc,f1,epoch_val_loss
     print("eval")
-    print(f"{best_acc},{best_f1}")
-    print(f"ood:{best_ood_acc},{best_ood_f1}")
-    print(f"id:{id_acc},{id_f1}")
+    print(f"{acc},{f1}")
+    print(f"ood:{ood_acc},{unknow_f1}")
+    print(f"id:{id_acc},{know_f1}")
     print(f"binary:{binary_acc},{binary_f1}")
-    return best_acc,best_f1,best_ood_acc,best_ood_f1
+    return acc, f1, ood_acc, unknow_f1
 
 def main_test(config):
     # labels_dict = get_label_dict(config["data_path"], config["know_rate"])
@@ -466,7 +485,7 @@ def main_test(config):
     print(labels_dict)
     tokenizer = BertTokenizer.from_pretrained(config["pretrained_path"])
     model = torch.load(config["model_save_path"])
-    config["num_labels"] = len(labels_dict.keys())+1
+    config["num_labels"] = len(labels_dict.keys())
     dataset = load_dataset(config["train_script_path"], labels_dict=labels_dict,cache_dir=config["cache_dir"])
     train_dataset, val_dataset, test_dataset = dataset["train"], dataset["validation"], dataset["test"]
     device="cuda" if torch.cuda.is_available()else "cpu"
@@ -502,13 +521,13 @@ def main_test(config):
 
 if __name__=="__main__":
     #只需要修改save_dir 和 tb_folder
-    save_dir="./best_model_idea_binary_v1"
+    save_dir="./best_model_rate100"
     config={
         "pretrained_path":"./bert-base-uncased",
         "data_path":"./oos",
         "train_script_path":"./dataset/oos_data",
         "neg_script_path":"./dataset/neg_data",
-        "epoch":400,
+        "epoch":200,
         "accumulation_steps":1,
         "num_labels":2,
         "save_dir":save_dir,
@@ -522,17 +541,17 @@ if __name__=="__main__":
         "linear_lr":1e-4,
         "linear_decay":1e-4,
         "use_balance":False,
-        "tmp":0.1,
+        "tmp":1,
         "val_tmp":1,
         "use_neg":True,
-        "token_length":64,
+        "token_length":48,
         "alpha":1.0,
-        "beta":0.0,
+        "beta":1.0,
         "neg_multiple":6,
-        "cache_dir":"cache_v1",
-        "tb_folder": "./tb_folder_idea_binary_v1",
-        "know_rate": 0.25,
-        "batch_size": 96,
+        "cache_dir":"cache_rate100",
+        "tb_folder": "./tb_folder_rate100",
+        "know_rate": 1,
+        "batch_size": 16,
     }
     train(config)
     # eval(config)
